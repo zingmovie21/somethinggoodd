@@ -1,0 +1,58 @@
+name: MacRDP
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: MacRDP
+    runs-on: macos-latest
+    
+    steps: 
+    - name: Set Up LocalToNet
+      run: |
+        # Install LocalToNet CLI
+        curl -s -o localtonet.sh -L "https://github.com/localtonet/localtonet-cli/releases/latest/download/localtonet.sh"
+        chmod +x localtonet.sh
+        ./localtonet.sh install
+
+        # Authenticate with LocalToNet
+        localtonet authtoken DNfLxWSJA1iap7eHRgsoqM0FXZt2rhj4G
+
+    - name: Enabling Remote Access
+      run: |
+        # Disable Spotlight Indexing
+        sudo mdutil -i off -a
+
+        # Create a New User
+        sudo dscl . -create /Users/runneradmin
+        sudo dscl . -create /Users/runneradmin UserShell /bin/bash
+        sudo dscl . -create /Users/runneradmin RealName "Runner_Admin"
+        sudo dscl . -create /Users/runneradmin UniqueID 1001
+        sudo dscl . -create /Users/runneradmin PrimaryGroupID 80
+        sudo dscl . -create /Users/runneradmin NFSHomeDirectory /Users/runneradmin
+        sudo dscl . -passwd /Users/runneradmin P@ssw0rd!
+        sudo createhomedir -c -u runneradmin > /dev/null
+        sudo dscl . -append /Groups/admin GroupMembership runneradmin
+
+        # Enable VNC
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -allowAccessFor -allUsers -privs -all
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes 
+        echo "runnerrdp" | perl -we 'BEGIN { @k = unpack "C*", pack "H*", "1734516E8BA8C5E2FF1C39567390ADCA"}; $_ = <>; chomp; s/^(.{8}).*/$1/; @p = unpack "C*", $_; foreach (@k) { printf "%02X", $_ ^ (shift @p || 0) }; print "\n"' | sudo tee /Library/Preferences/com.apple.VNCSettings.txt
+
+        # Restart VNC Services
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate
+
+    - name: Start LocalToNet Tunnel for VNC
+      run: |
+        localtonet share tcp 5900 --region us &
+
+    - name: Display Connection Details
+      run: |
+        echo "----------------------------------------------------"
+        echo "Connect to the VNC server using the following details:"
+        echo "----------------------------------------------------"
+        echo "IP/URL:"
+        localtonet tunnels | grep "tcp://"
+        echo "Username: runneradmin"
+        echo "Password: P@ssw0rd!"
